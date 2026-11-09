@@ -34,6 +34,7 @@ public class MainActivity extends Activity {
     private SharedPreferences prefs;
     private final ArrayList<Contact> contacts = new ArrayList<>();
     private final ArrayList<Template> templates = new ArrayList<>();
+    private final ArrayList<HistoryEntry> history = new ArrayList<>();
     private final ArrayList<Integer> selected = new ArrayList<>();
     private LinearLayout root, content, header;
     private EditText messagePreview;
@@ -56,6 +57,11 @@ public class MainActivity extends Activity {
         String name, body;
         Template(String n,String b){name=n;body=b;}
     }
+    static class HistoryEntry {
+        long date;
+        String recipient, phone, message, status;
+        HistoryEntry(long d,String r,String p,String m,String s){date=d;recipient=r;phone=p;message=m;status=s;}
+    }
 
     @Override public void onCreate(Bundle b) {
         super.onCreate(b);
@@ -74,6 +80,13 @@ public class MainActivity extends Activity {
             for(int i=0;i<a.length();i++){JSONObject o=a.getJSONObject(i);contacts.add(new Contact(o.optString("first"),o.optString("last"),o.optString("phone")));}
         } catch(Exception ignored){}
         try {
+            JSONArray h=new JSONArray(prefs.getString("history","[]"));
+            for(int i=0;i<h.length();i++){
+                JSONObject o=h.getJSONObject(i);
+                history.add(new HistoryEntry(o.optLong("date"),o.optString("recipient"),o.optString("phone"),o.optString("message"),o.optString("status")));
+            }
+        } catch(Exception ignored){}
+        try {
             JSONArray a=new JSONArray(prefs.getString("templates","[]"));
             for(int i=0;i<a.length();i++){JSONObject o=a.getJSONObject(i);templates.add(new Template(o.optString("name"),o.optString("body")));}
         } catch(Exception ignored){}
@@ -87,7 +100,11 @@ public class MainActivity extends Activity {
         try{
             JSONArray c=new JSONArray(); for(Contact x:contacts){JSONObject o=new JSONObject();o.put("first",x.first);o.put("last",x.last);o.put("phone",x.phone);c.put(o);}
             JSONArray t=new JSONArray(); for(Template x:templates){JSONObject o=new JSONObject();o.put("name",x.name);o.put("body",x.body);t.put(o);}
-            prefs.edit().putString("contacts",c.toString()).putString("templates",t.toString()).putString("appName",appName).putString("logoText",logoText).putInt("accent",accent).putString("logoUri",logoUri==null?null:logoUri.toString()).apply();
+            JSONArray h=new JSONArray();
+            for(HistoryEntry x:history){
+                JSONObject o=new JSONObject();o.put("date",x.date);o.put("recipient",x.recipient);o.put("phone",x.phone);o.put("message",x.message);o.put("status",x.status);h.put(o);
+            }
+            prefs.edit().putString("contacts",c.toString()).putString("templates",t.toString()).putString("history",h.toString()).putString("appName",appName).putString("logoText",logoText).putInt("accent",accent).putString("logoUri",logoUri==null?null:logoUri.toString()).apply();
         }catch(Exception ignored){}
     }
 
@@ -99,12 +116,12 @@ public class MainActivity extends Activity {
         TextView title=new TextView(this);title.setText(appName);title.setTextSize(21);title.setTypeface(null,Typeface.BOLD);title.setTextColor(Color.rgb(28,39,56));header.addView(title,new LinearLayout.LayoutParams(0,dp(48),1));
         root.addView(header);
         LinearLayout nav=new LinearLayout(this);nav.setPadding(dp(10),dp(8),dp(10),dp(8));nav.setBackgroundColor(Color.WHITE);
-        String[] tabs={"Contacts","Modèles","Apparence"};
-        for(int i=0;i<tabs.length;i++){final int tab=i;Button b=button(tabs[i]);b.setTextSize(13);b.setOnClickListener(v->{currentTab=tab;render();});nav.addView(b,new LinearLayout.LayoutParams(0,dp(42),1));}
+        String[] tabs={"Contacts","Modèles","Apparence","Historique"};
+        for(int i=0;i<tabs.length;i++){final int tab=i;Button b=button(tabs[i]);b.setTextSize(11);b.setPadding(dp(2),0,dp(2),0);b.setOnClickListener(v->{currentTab=tab;render();});nav.addView(b,new LinearLayout.LayoutParams(0,dp(42),1));}
         root.addView(nav);
         ScrollView scroll=new ScrollView(this);content=new LinearLayout(this);content.setOrientation(LinearLayout.VERTICAL);content.setPadding(dp(16),dp(16),dp(16),dp(24));scroll.addView(content);root.addView(scroll,new LinearLayout.LayoutParams(-1,0,1));
         setContentView(root);
-        if(currentTab==0) showContacts(); else if(currentTab==1) showTemplates(); else showAppearance();
+        if(currentTab==0) showContacts(); else if(currentTab==1) showTemplates(); else if(currentTab==2) showAppearance(); else showHistory();
     }
 
     private void showContacts(){
@@ -147,29 +164,79 @@ public class MainActivity extends Activity {
         if(selected.isEmpty()){toast("Sélectionne au moins un contact.");return;}
         String body=messagePreview.getText().toString().trim();
         if(body.isEmpty()){toast("Le message est vide.");return;}
-        // L'utilisateur a demandé un envoi direct en un seul appui : pas de seconde confirmation.
-        sendNow(body);
+        new AlertDialog.Builder(this)
+                .setTitle("Confirmation d'envoi")
+                .setMessage("Êtes-vous sûr de vouloir envoyer votre message ?")
+                .setNegativeButton("Non", (dialog, which) -> dialog.dismiss())
+                .setPositiveButton("Oui", (dialog, which) -> sendNow(body))
+                .show();
     }
     private void sendNow(String body){
         if(Build.VERSION.SDK_INT>=23&&checkSelfPermission(Manifest.permission.SEND_SMS)!=PackageManager.PERMISSION_GRANTED){pendingSms=body;requestPermissions(new String[]{Manifest.permission.SEND_SMS},REQ_SMS);return;}
         SmsManager manager=SmsManager.getDefault();
-        // Traiter chaque destinataire séparément : une erreur sur un numéro ne bloque pas les suivants.
+        int sent=0, failed=0;
         for(int idx:new ArrayList<>(selected)){
             if(idx<0||idx>=contacts.size())continue;
             Contact c=contacts.get(idx);
             String phone=c.phone.replaceAll("[\\s().-]", "");
-            if(phone.length()<6)continue;
+            String text=personalize(body,c);
+            if(phone.length()<6){
+                addHistory(c.display(),c.phone,text,"Échec : numéro de téléphone invalide");
+                failed++;
+                continue;
+            }
             try{
-                String text=personalize(body,c);
                 ArrayList<String> parts=manager.divideMessage(text);
                 if(parts.size()>1)manager.sendMultipartTextMessage(phone,null,parts,null,null);
                 else manager.sendTextMessage(phone,null,text,null,null);
-            }catch(SecurityException ignored){ /* permission retirée par Android */ }
-             catch(Exception ignored){ /* échec isolé : poursuivre les autres destinataires */ }
+                addHistory(c.display(),phone,text,"Transmis à Android — réception non confirmée");
+                sent++;
+            }catch(SecurityException e){
+                addHistory(c.display(),phone,text,"Échec : autorisation SMS indisponible");
+                failed++;
+            }catch(Exception e){
+                addHistory(c.display(),phone,text,"Échec : "+(e.getMessage()==null?"erreur lors de l'envoi":e.getMessage()));
+                failed++;
+            }
         }
-        // Aucun historique ni compte rendu applicatif, conformément au besoin exprimé.
+        saveData();
+        toast(sent+" SMS confié(s) à Android"+(failed>0 ? " — "+failed+" échec(s)" : "")+". Consulte l'historique pour le détail.");
     }
-    @Override public void onRequestPermissionsResult(int request,String[] permissions,int[] results){super.onRequestPermissionsResult(request,permissions,results);if(request==REQ_SMS){if(results.length>0&&results[0]==PackageManager.PERMISSION_GRANTED){String message=pendingSms;pendingSms=null;if(message!=null)sendNow(message);}else{pendingSms=null;toast("Autorisation SMS nécessaire pour l'envoi direct.");}}}
+    private void addHistory(String recipient,String phone,String message,String status){
+        history.add(0,new HistoryEntry(System.currentTimeMillis(),recipient,phone,message,status));
+    }
+    private void showHistory(){
+        section("Historique des envois");
+        content.addView(label("Les éléments sont conservés uniquement sur ce téléphone. « Transmis à Android » ne signifie pas que le SMS a été reçu.",12,Color.DKGRAY));
+        if(history.isEmpty()){
+            content.addView(label("Aucun envoi enregistré pour le moment.",15,Color.GRAY));
+            return;
+        }
+        Button clear=button("Effacer tout l'historique");
+        clear.setOnClickListener(v->new AlertDialog.Builder(this)
+                .setTitle("Effacer l'historique ?")
+                .setMessage("Cette suppression est définitive.")
+                .setNegativeButton("Annuler",null)
+                .setPositiveButton("Effacer",(d,w)->{history.clear();saveData();render();})
+                .show());
+        content.addView(clear);
+        java.text.SimpleDateFormat format=new java.text.SimpleDateFormat("dd/MM/yyyy à HH:mm",Locale.FRANCE);
+        for(int i=0;i<history.size();i++){
+            final int index=i;
+            HistoryEntry entry=history.get(i);
+            LinearLayout item=card();
+            LinearLayout details=new LinearLayout(this);details.setOrientation(LinearLayout.VERTICAL);
+            TextView who=label(entry.recipient+" — "+entry.phone,15,Color.rgb(30,42,60));who.setTypeface(null,Typeface.BOLD);
+            TextView when=label(format.format(new java.util.Date(entry.date)),12,Color.GRAY);
+            TextView status=label(entry.status,13,entry.status.startsWith("Échec")?Color.rgb(190,45,45):Color.rgb(22,125,85));
+            details.addView(who);details.addView(when);details.addView(status);
+            item.addView(details,new LinearLayout.LayoutParams(0,-2,1));
+            Button view=smallButton("Voir");
+            view.setOnClickListener(v->new AlertDialog.Builder(this).setTitle(entry.recipient+" — "+entry.phone).setMessage("Date : "+format.format(new java.util.Date(entry.date))+"\\n\\nStatut : "+entry.status+"\\n\\nMessage :\\n"+entry.message).setPositiveButton("Fermer",null).setNeutralButton("Supprimer",(d,w)->{history.remove(index);saveData();render();}).show());
+            item.addView(view);
+        }
+    }
+    @Override public void onRequestPermissionsResult(int request,String[] permissions,int[] results){super.onRequestPermissionsResult(request,permissions,results);if(request==REQ_SMS){if(results.length>0&&results[0]==PackageManager.PERMISSION_GRANTED){String message=pendingSms;pendingSms=null;if(message!=null)sendNow(message);}else{String message=pendingSms;pendingSms=null;if(message!=null){for(int idx:new ArrayList<>(selected)){if(idx>=0&&idx<contacts.size()){Contact c=contacts.get(idx);addHistory(c.display(),c.phone,personalize(message,c),"Échec : autorisation SMS refusée");}}saveData();}toast("Autorisation SMS nécessaire pour l'envoi.");}}}
 
     private void showTemplates(){
         section("Bibliothèque de modèles");Button add=button("+ Créer un modèle");add.setOnClickListener(v->templateDialog(-1));content.addView(add);
