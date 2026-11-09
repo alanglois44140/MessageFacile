@@ -27,7 +27,8 @@ jobs:
           yes | "$SDKMANAGER" --licenses
 
       - name: Installer les outils Android
-        run: "$SDKMANAGER" 'platforms;android-35' 'build-tools;35.0.0'
+        run: |
+          "$SDKMANAGER" "platforms;android-35" "build-tools;35.0.0"
 
       - name: Construire l’APK
         run: gradle --no-daemon assembleDebug
