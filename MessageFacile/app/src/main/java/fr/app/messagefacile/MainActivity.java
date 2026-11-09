@@ -90,12 +90,27 @@ public class MainActivity extends Activity {
             JSONArray a=new JSONArray(prefs.getString("templates","[]"));
             for(int i=0;i<a.length();i++){JSONObject o=a.getJSONObject(i);templates.add(new Template(o.optString("name"),o.optString("body")));}
         } catch(Exception ignored){}
-        if(templates.isEmpty()){
-            templates.add(new Template("Rappel", "Bonjour {prenom}, nous vous rappelons que ... Bonne journée."));
-            templates.add(new Template("Information", "Bonjour {prenom}, nous souhaitons vous informer que ..."));
-            saveData();
-        }
+        // Remplace les deux anciens modèles fournis par défaut, sans toucher aux modèles personnels.
+        templates.removeIf(t ->
+                (t.name.equals("Rappel") && t.body.equals("Bonjour {prenom}, nous vous rappelons que ... Bonne journée.")) ||
+                (t.name.equals("Information") && t.body.equals("Bonjour {prenom}, nous souhaitons vous informer que ...")));
+        addDefaultTemplate("EXERCICE PPMS CONFINEMENT",
+                "EXERCICE EXERCICE EXERCICE\\nPPMS CONFINEMENT EN COURS AU COLLEGE ...\\nMERCI DE VOUS METTRE EN SECURITE ET DE SUIVRE LES CONSIGNES");
+        addDefaultTemplate("EXERCICE PPMS INTRUSION",
+                "EXERCICE EXERCICE EXERCICE\\nPPMS INTRUSION EN COURS AU COLLEGE ...\\nMERCI DE VOUS METTRE EN SECURITE ET DE SUIVRE LES CONSIGNES");
+        addDefaultTemplate("PPMS CONFINEMENT",
+                "PPMS CONFINEMENT EN COURS AU COLLEGE ...\\nMERCI DE VOUS METTRE EN SECURITE ET DE SUIVRE LES CONSIGNES");
+        addDefaultTemplate("PPMS INTRUSION",
+                "PPMS INTRUSION EN COURS AU COLLEGE ...\\nMERCI DE VOUS METTRE EN SECURITE ET DE SUIVRE LES CONSIGNES");
+        addDefaultTemplate("FIN D'ALERTE",
+                "LE CHEF D'ETABLISSEMENT VOUS INFORME DE LA FIN DU PPMS");
+        saveData();
     }
+    private void addDefaultTemplate(String name, String body) {
+        for (Template t : templates) if (t.name.equals(name)) return;
+        templates.add(new Template(name, body));
+    }
+
     private void saveData(){
         try{
             JSONArray c=new JSONArray(); for(Contact x:contacts){JSONObject o=new JSONObject();o.put("first",x.first);o.put("last",x.last);o.put("phone",x.phone);c.put(o);}
@@ -140,17 +155,79 @@ public class MainActivity extends Activity {
             render();
         });
         content.addView(selectAllCheck);
+
+        LinearLayout deleteActions = row();
+        Button deleteSelected = button("Supprimer la sélection");
+        deleteSelected.setTextSize(12);
+        deleteSelected.setOnClickListener(v -> {
+            if (selected.isEmpty()) { toast("Sélectionne au moins un contact à supprimer."); return; }
+            int number = selected.size();
+            new AlertDialog.Builder(this)
+                    .setTitle("Supprimer les contacts sélectionnés ?")
+                    .setMessage("Supprimer définitivement " + number + " contact(s) ?")
+                    .setNegativeButton("Annuler", null)
+                    .setPositiveButton("Supprimer", (dialog, which) -> {
+                        ArrayList<Integer> indexes = new ArrayList<>(selected);
+                        java.util.Collections.sort(indexes, java.util.Collections.reverseOrder());
+                        for (Integer index : indexes) if (index >= 0 && index < contacts.size()) contacts.remove((int) index);
+                        selected.clear(); saveData(); render();
+                        toast(number + " contact(s) supprimé(s).");
+                    }).show();
+        });
+        Button deleteAll = button("Supprimer tous");
+        deleteAll.setTextSize(12);
+        deleteAll.setOnClickListener(v -> {
+            if (contacts.isEmpty()) { toast("Aucun contact à supprimer."); return; }
+            new AlertDialog.Builder(this)
+                    .setTitle("Supprimer tous les contacts ?")
+                    .setMessage("Cette action supprimera définitivement les " + contacts.size() + " contacts. Les modèles et l'historique seront conservés.")
+                    .setNegativeButton("Annuler", null)
+                    .setPositiveButton("Tout supprimer", (dialog, which) -> {
+                        int number = contacts.size(); contacts.clear(); selected.clear(); saveData(); render();
+                        toast(number + " contact(s) supprimé(s).");
+                    }).show();
+        });
+        deleteActions.addView(deleteSelected, new LinearLayout.LayoutParams(0, dp(44), 1));
+        deleteActions.addView(deleteAll, new LinearLayout.LayoutParams(0, dp(44), 1));
+        content.addView(deleteActions);
         for(int i=0;i<contacts.size();i++){
             final int index=i;Contact c=contacts.get(i);LinearLayout card=card();CheckBox check=new CheckBox(this);check.setButtonTintList(android.content.res.ColorStateList.valueOf(accent));check.setText(c.display()+"\n"+c.phone);check.setTextSize(15);check.setPadding(dp(6),dp(8),dp(6),dp(8));check.setChecked(selected.contains(i));check.setOnCheckedChangeListener((v,on)->{if(on){if(!selected.contains(index))selected.add(index);}else selected.remove((Integer)index);if(selectAllCheck!=null){syncingSelectAll=true;selectAllCheck.setChecked(!contacts.isEmpty() && selected.size()==contacts.size());syncingSelectAll=false;}});card.addView(check,new LinearLayout.LayoutParams(0,-2,1));Button edit=smallButton("✎");edit.setOnClickListener(v->contactDialog(index));Button del=smallButton("×");del.setOnClickListener(v->{new AlertDialog.Builder(this).setMessage("Supprimer ce contact ?").setNegativeButton("Annuler",null).setPositiveButton("Supprimer",(d,w)->{contacts.remove(index);selected.clear();saveData();render();}).show();});card.addView(edit);card.addView(del);
         }
         section("Préparer un envoi");
         ArrayList<String> names=new ArrayList<>();for(Template t:templates)names.add(t.name);if(names.isEmpty())names.add("Aucun modèle");
         templateSpinner=new Spinner(this);templateSpinner.setAdapter(new ArrayAdapter<>(this,android.R.layout.simple_spinner_dropdown_item,names));content.addView(templateSpinner);
-        messagePreview=new EditText(this);messagePreview.setMinLines(4);messagePreview.setGravity(Gravity.TOP);messagePreview.setTextSize(15);messagePreview.setHint("Le contenu du SMS apparaîtra ici…");messagePreview.setBackground(roundBg(Color.WHITE,Color.rgb(220,226,235)));content.addView(messagePreview,new LinearLayout.LayoutParams(-1,-2));
+        messagePreview=new EditText(this);messagePreview.setMinLines(4);messagePreview.setGravity(Gravity.TOP);messagePreview.setTextSize(15);messagePreview.setHint("Le contenu du SMS apparaîtra ici…");messagePreview.setBackground(roundBg(Color.WHITE,Color.rgb(220,226,235)));content.addView(messagePreview,new LinearLayout.LayoutParams(-1,-2));addSmsCounter(content, messagePreview);
         templateSpinner.setOnItemSelectedListener(new android.widget.AdapterView.OnItemSelectedListener(){public void onNothingSelected(android.widget.AdapterView<?> p){}public void onItemSelected(android.widget.AdapterView<?> p,View v,int pos,long id){if(pos<templates.size())messagePreview.setText(templates.get(pos).body);}});
         Button preview=button("Actualiser avec les prénoms");preview.setOnClickListener(v->showPreview());content.addView(preview);
         Button send=button("Envoyer le SMS aux contacts sélectionnés");send.setTextColor(Color.WHITE);send.setBackground(rippleBg(accent,accent));send.setOnClickListener(v->confirmSend());content.addView(send);
         TextView note=label("Les SMS sont envoyés séparément à chaque numéro. Vérifie les destinataires et le contenu avant validation.",12,Color.DKGRAY);content.addView(note);
+    }
+
+    private void updateSmsCounter(EditText input, TextView counter) {
+        String value = input.getText().toString();
+        int[] length = android.telephony.SmsMessage.calculateLength(value, false);
+        int segments = length[0];
+        int used = length[1];
+        int remaining = length[2];
+        int limit = length[3] == 1 ? 160 : 70;
+        String text;
+        if (value.isEmpty()) text = "0 / " + limit + " caractères — 1 SMS";
+        else if (segments <= 1) text = used + " / " + limit + " caractères — 1 SMS (" + remaining + " restant(s))";
+        else text = used + " caractères — " + segments + " SMS";
+        counter.setText(text);
+        counter.setTextColor(segments > 1 ? Color.rgb(190,45,45) : Color.GRAY);
+    }
+
+    private TextView addSmsCounter(LinearLayout parent, EditText input) {
+        TextView counter = label("", 12, Color.GRAY);
+        parent.addView(counter);
+        updateSmsCounter(input, counter);
+        input.addTextChangedListener(new android.text.TextWatcher() {
+            public void beforeTextChanged(CharSequence s, int start, int count, int after) {}
+            public void onTextChanged(CharSequence s, int start, int before, int count) { updateSmsCounter(input, counter); }
+            public void afterTextChanged(android.text.Editable e) {}
+        });
+        return counter;
     }
 
     private void showPreview(){
@@ -255,7 +332,7 @@ public class MainActivity extends Activity {
     }
 
     private void contactDialog(int index){boolean edit=index>=0;Contact old=edit?contacts.get(index):new Contact("","","");LinearLayout box=new LinearLayout(this);box.setPadding(dp(16),dp(8),dp(16),0);box.setOrientation(LinearLayout.VERTICAL);EditText f=field("Prénom",old.first),l=field("Nom",old.last),p=field("Téléphone portable",old.phone);box.addView(f);box.addView(l);box.addView(p);new AlertDialog.Builder(this).setTitle(edit?"Modifier le contact":"Nouveau contact").setView(box).setNegativeButton("Annuler",null).setPositiveButton("Enregistrer",(d,w)->{String phone=p.getText().toString().trim();if(phone.isEmpty()){toast("Le numéro de téléphone est obligatoire.");return;}Contact c=new Contact(f.getText().toString().trim(),l.getText().toString().trim(),phone);if(edit)contacts.set(index,c);else contacts.add(c);saveData();render();}).show();}
-    private void templateDialog(int index){boolean edit=index>=0;Template old=edit?templates.get(index):new Template("","");LinearLayout box=new LinearLayout(this);box.setPadding(dp(16),dp(8),dp(16),0);box.setOrientation(LinearLayout.VERTICAL);EditText n=field("Nom du modèle",old.name),b=field("Texte du SMS",old.body);b.setMinLines(5);b.setGravity(Gravity.TOP);box.addView(n);box.addView(b);new AlertDialog.Builder(this).setTitle(edit?"Modifier le modèle":"Nouveau modèle").setView(box).setNegativeButton("Annuler",null).setPositiveButton("Enregistrer",(d,w)->{Template t=new Template(n.getText().toString().trim(),b.getText().toString());if(t.name.isEmpty()||t.body.trim().isEmpty()){toast("Renseigne le nom et le texte.");return;}if(edit)templates.set(index,t);else templates.add(t);saveData();render();}).show();}
+    private void templateDialog(int index){boolean edit=index>=0;Template old=edit?templates.get(index):new Template("","");LinearLayout box=new LinearLayout(this);box.setPadding(dp(16),dp(8),dp(16),0);box.setOrientation(LinearLayout.VERTICAL);EditText n=field("Nom du modèle",old.name),b=field("Texte du SMS",old.body);b.setMinLines(5);b.setGravity(Gravity.TOP);box.addView(n);box.addView(b);addSmsCounter(box, b);new AlertDialog.Builder(this).setTitle(edit?"Modifier le modèle":"Nouveau modèle").setView(box).setNegativeButton("Annuler",null).setPositiveButton("Enregistrer",(d,w)->{Template t=new Template(n.getText().toString().trim(),b.getText().toString());if(t.name.isEmpty()||t.body.trim().isEmpty()){toast("Renseigne le nom et le texte.");return;}if(edit)templates.set(index,t);else templates.add(t);saveData();render();}).show();}
 
     private void pickCsv(){Intent i=new Intent(Intent.ACTION_OPEN_DOCUMENT);i.setType("text/*");i.addCategory(Intent.CATEGORY_OPENABLE);startActivityForResult(i,REQ_CSV);}
     @Override protected void onActivityResult(int request,int result,Intent data){super.onActivityResult(request,result,data);if(result!=RESULT_OK||data==null)return;Uri uri=data.getData();if(request==REQ_LOGO){logoUri=uri;try{getContentResolver().takePersistableUriPermission(uri,Intent.FLAG_GRANT_READ_URI_PERMISSION);}catch(Exception ignored){}saveData();render();toast("Logo personnalisé enregistré.");return;}if(request==REQ_CSV){importCsv(uri);}}
