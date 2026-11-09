@@ -1,0 +1,13 @@
+plugins { id 'com.android.application' }
+
+android {
+    namespace 'fr.app.messagefacile'
+    compileSdk 35
+    defaultConfig {
+        applicationId 'fr.app.messagefacile'
+        minSdk 23
+        targetSdk 28
+        versionCode 1
+        versionName '1.0'
+    }
+}
