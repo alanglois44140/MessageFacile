@@ -91,9 +91,13 @@ public class MainActivity extends Activity {
             for(int i=0;i<a.length();i++){JSONObject o=a.getJSONObject(i);templates.add(new Template(o.optString("name"),o.optString("body")));}
         } catch(Exception ignored){}
         // Remplace les deux anciens modèles fournis par défaut, sans toucher aux modèles personnels.
-        templates.removeIf(t ->
-                (t.name.equals("Rappel") && t.body.equals("Bonjour {prenom}, nous vous rappelons que ... Bonne journée.")) ||
-                (t.name.equals("Information") && t.body.equals("Bonjour {prenom}, nous souhaitons vous informer que ...")));
+        for (int i = templates.size() - 1; i >= 0; i--) {
+            Template t = templates.get(i);
+            if ((t.name.equals("Rappel") && t.body.equals("Bonjour {prenom}, nous vous rappelons que ... Bonne journée.")) ||
+                (t.name.equals("Information") && t.body.equals("Bonjour {prenom}, nous souhaitons vous informer que ..."))) {
+                templates.remove(i);
+            }
+        }
         addDefaultTemplate("EXERCICE PPMS CONFINEMENT",
                 "EXERCICE EXERCICE EXERCICE\\nPPMS CONFINEMENT EN COURS AU COLLEGE ...\\nMERCI DE VOUS METTRE EN SECURITE ET DE SUIVRE LES CONSIGNES");
         addDefaultTemplate("EXERCICE PPMS INTRUSION",
