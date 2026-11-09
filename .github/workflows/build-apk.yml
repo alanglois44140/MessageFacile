@@ -22,6 +22,19 @@ jobs:
         with:
           gradle-version: '8.9'
 
-      - name: Vérifier le projet Android
+      - name: Installer le SDK Android
+        run: |
+          SDKMANAGER=$(find "$ANDROID_HOME/cmdline-tools" -name sdkmanager -type f | head -n 1)
+          echo "SDKMANAGER=$SDKMANAGER" >> "$GITHUB_ENV"
+          yes | "$SDKMANAGER" --licenses
+          "$SDKMANAGER" "platforms;android-35" "build-tools;35.0.0"
+
+      - name: Compiler MessageFacile
         working-directory: MessageFacile
-        run: gradle --no-daemon projects
+        run: gradle --no-daemon assembleDebug
+
+      - name: Récupérer le fichier APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: MessageFacile-APK
+          path: MessageFacile/app/build/outputs/apk/debug/app-debug.apk
