@@ -39,6 +39,8 @@ public class MainActivity extends Activity {
     private EditText messagePreview;
     private Spinner templateSpinner;
     private TextView countLabel, logoLabel;
+    private CheckBox selectAllCheck;
+    private boolean syncingSelectAll = false;
     private int accent = Color.rgb(39,110,241);
     private String appName = "MessageFacile", logoText = "✉";
     private Uri logoUri;
@@ -109,8 +111,20 @@ public class MainActivity extends Activity {
         section("Mes contacts");
         LinearLayout actions=row();Button add=button("+ Ajouter");add.setOnClickListener(v->contactDialog(-1));Button csv=button("Importer CSV");csv.setOnClickListener(v->pickCsv());actions.addView(add,new LinearLayout.LayoutParams(0,dp(46),1));actions.addView(csv,new LinearLayout.LayoutParams(0,dp(46),1));content.addView(actions);
         countLabel=label(contacts.size()+" contact(s) enregistré(s)",14,Color.GRAY);content.addView(countLabel);
+        selectAllCheck = new CheckBox(this);
+        selectAllCheck.setText("Tout sélectionner / désélectionner");
+        selectAllCheck.setTextSize(14);
+        selectAllCheck.setButtonTintList(android.content.res.ColorStateList.valueOf(accent));
+        selectAllCheck.setChecked(!contacts.isEmpty() && selected.size() == contacts.size());
+        selectAllCheck.setOnCheckedChangeListener((v, checked) -> {
+            if (syncingSelectAll) return;
+            selected.clear();
+            if (checked) for (int n = 0; n < contacts.size(); n++) selected.add(n);
+            render();
+        });
+        content.addView(selectAllCheck);
         for(int i=0;i<contacts.size();i++){
-            final int index=i;Contact c=contacts.get(i);LinearLayout card=card();CheckBox check=new CheckBox(this);check.setButtonTintList(android.content.res.ColorStateList.valueOf(accent));check.setText(c.display()+"\n"+c.phone);check.setTextSize(15);check.setPadding(dp(6),dp(8),dp(6),dp(8));check.setChecked(selected.contains(i));check.setOnCheckedChangeListener((v,on)->{if(on){if(!selected.contains(index))selected.add(index);}else selected.remove((Integer)index);});card.addView(check,new LinearLayout.LayoutParams(0,-2,1));Button edit=smallButton("✎");edit.setOnClickListener(v->contactDialog(index));Button del=smallButton("×");del.setOnClickListener(v->{new AlertDialog.Builder(this).setMessage("Supprimer ce contact ?").setNegativeButton("Annuler",null).setPositiveButton("Supprimer",(d,w)->{contacts.remove(index);selected.clear();saveData();render();}).show();});card.addView(edit);card.addView(del);
+            final int index=i;Contact c=contacts.get(i);LinearLayout card=card();CheckBox check=new CheckBox(this);check.setButtonTintList(android.content.res.ColorStateList.valueOf(accent));check.setText(c.display()+"\n"+c.phone);check.setTextSize(15);check.setPadding(dp(6),dp(8),dp(6),dp(8));check.setChecked(selected.contains(i));check.setOnCheckedChangeListener((v,on)->{if(on){if(!selected.contains(index))selected.add(index);}else selected.remove((Integer)index);if(selectAllCheck!=null){syncingSelectAll=true;selectAllCheck.setChecked(!contacts.isEmpty() && selected.size()==contacts.size());syncingSelectAll=false;}});card.addView(check,new LinearLayout.LayoutParams(0,-2,1));Button edit=smallButton("✎");edit.setOnClickListener(v->contactDialog(index));Button del=smallButton("×");del.setOnClickListener(v->{new AlertDialog.Builder(this).setMessage("Supprimer ce contact ?").setNegativeButton("Annuler",null).setPositiveButton("Supprimer",(d,w)->{contacts.remove(index);selected.clear();saveData();render();}).show();});card.addView(edit);card.addView(del);
         }
         section("Préparer un envoi");
         ArrayList<String> names=new ArrayList<>();for(Template t:templates)names.add(t.name);if(names.isEmpty())names.add("Aucun modèle");
@@ -118,7 +132,7 @@ public class MainActivity extends Activity {
         messagePreview=new EditText(this);messagePreview.setMinLines(4);messagePreview.setGravity(Gravity.TOP);messagePreview.setTextSize(15);messagePreview.setHint("Le contenu du SMS apparaîtra ici…");messagePreview.setBackground(roundBg(Color.WHITE,Color.rgb(220,226,235)));content.addView(messagePreview,new LinearLayout.LayoutParams(-1,-2));
         templateSpinner.setOnItemSelectedListener(new android.widget.AdapterView.OnItemSelectedListener(){public void onNothingSelected(android.widget.AdapterView<?> p){}public void onItemSelected(android.widget.AdapterView<?> p,View v,int pos,long id){if(pos<templates.size())messagePreview.setText(templates.get(pos).body);}});
         Button preview=button("Actualiser avec les prénoms");preview.setOnClickListener(v->showPreview());content.addView(preview);
-        Button send=button("Envoyer le SMS aux contacts sélectionnés");send.setTextColor(Color.WHITE);send.setBackground(roundBg(accent,accent));send.setOnClickListener(v->confirmSend());content.addView(send);
+        Button send=button("Envoyer le SMS aux contacts sélectionnés");send.setTextColor(Color.WHITE);send.setBackground(rippleBg(accent,accent));send.setOnClickListener(v->confirmSend());content.addView(send);
         TextView note=label("Les SMS sont envoyés séparément à chaque numéro. Vérifie les destinataires et le contenu avant validation.",12,Color.DKGRAY);content.addView(note);
     }
 
@@ -218,7 +232,8 @@ public class MainActivity extends Activity {
     private LinearLayout card(){LinearLayout l=row();l.setPadding(dp(8),dp(6),dp(6),dp(6));l.setBackground(roundBg(Color.WHITE,Color.rgb(232,236,243)));LinearLayout.LayoutParams p=new LinearLayout.LayoutParams(-1,-2);p.bottomMargin=dp(8);content.addView(l,p);return l;}
     private TextView label(String s,int size,int color){TextView t=new TextView(this);t.setText(s);t.setTextSize(size);t.setTextColor(color);t.setPadding(dp(4),dp(5),dp(4),dp(5));return t;}
     private EditText field(String hint,String value){EditText e=new EditText(this);e.setSingleLine(false);e.setText(value);e.setHint(hint);e.setTextSize(15);e.setPadding(dp(12),dp(8),dp(12),dp(8));e.setBackground(roundBg(Color.WHITE,Color.rgb(220,226,235)));LinearLayout.LayoutParams p=new LinearLayout.LayoutParams(-1,-2);p.bottomMargin=dp(8);e.setLayoutParams(p);return e;}
-    private Button button(String s){Button b=new Button(this);b.setText(s);b.setAllCaps(false);b.setTextColor(accent);b.setBackground(roundBg(Color.WHITE,Color.rgb(225,231,240)));return b;}
+    private Button button(String s){Button b=new Button(this);b.setText(s);b.setAllCaps(false);b.setTextColor(accent);b.setBackground(rippleBg(Color.WHITE,Color.rgb(225,231,240)));return b;}
+    private android.graphics.drawable.Drawable rippleBg(int color,int stroke){return new android.graphics.drawable.RippleDrawable(android.content.res.ColorStateList.valueOf(Color.argb(65,0,0,0)),roundBg(color,stroke),null);}
     private Button smallButton(String s){Button b=button(s);b.setMinWidth(dp(42));b.setTextSize(17);return b;}
     private android.graphics.drawable.GradientDrawable roundBg(int color,int stroke){android.graphics.drawable.GradientDrawable d=new android.graphics.drawable.GradientDrawable();d.setColor(color);d.setCornerRadius(dp(12));d.setStroke(dp(1),stroke);return d;}
     private int dp(int v){return (int)(v*getResources().getDisplayMetrics().density+0.5f);}
