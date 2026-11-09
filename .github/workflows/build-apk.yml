@@ -1,3 +1,4 @@
+
 name: Construire MessageFacile (APK)
 
 on:
@@ -10,7 +11,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - uses: actions/setup-java@v4
+      - uses: actions/setup-java@v5
         with:
           distribution: temurin
           java-version: '17'
@@ -19,14 +20,15 @@ jobs:
         with:
           gradle-version: '8.9'
 
-     - name: Préparer le SDK Android
+      - name: Préparer le SDK Android
         run: |
           SDKMANAGER=$(find "$ANDROID_HOME/cmdline-tools" -name sdkmanager -type f | head -n 1)
           echo "SDKMANAGER=$SDKMANAGER" >> "$GITHUB_ENV"
+          echo "$ANDROID_HOME/cmdline-tools/latest/bin" >> "$GITHUB_PATH"
           yes | "$SDKMANAGER" --licenses
 
       - name: Installer les outils Android
-        run: sdkmanager 'platforms;android-35' 'build-tools;35.0.0'
+        run: "$SDKMANAGER" 'platforms;android-35' 'build-tools;35.0.0'
 
       - name: Construire l’APK
         run: gradle --no-daemon assembleDebug
