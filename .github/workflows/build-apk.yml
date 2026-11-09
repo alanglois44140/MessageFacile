@@ -30,8 +30,13 @@ jobs:
         run: |
           "$SDKMANAGER" "platforms;android-35" "build-tools;35.0.0"
 
-      - name: Construire l’APK
-        run: gradle --no-daemon projects
+      - name: Vérifier les fichiers du projet
+        run: |
+          pwd
+          ls -la
+          ls -la app
+          cat settings.gradle
+          find app -maxdepth 4 -type f
 
       - name: Publier l’APK
         uses: actions/upload-artifact@v4
