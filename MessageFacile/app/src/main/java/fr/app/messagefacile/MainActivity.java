@@ -232,7 +232,7 @@ public class MainActivity extends Activity {
             details.addView(who);details.addView(when);details.addView(status);
             item.addView(details,new LinearLayout.LayoutParams(0,-2,1));
             Button view=smallButton("Voir");
-            view.setOnClickListener(v->new AlertDialog.Builder(this).setTitle(entry.recipient+" — "+entry.phone).setMessage("Date : "+format.format(new java.util.Date(entry.date))+"\\n\\nStatut : "+entry.status+"\\n\\nMessage :\\n"+entry.message).setPositiveButton("Fermer",null).setNeutralButton("Supprimer",(d,w)->{history.remove(index);saveData();render();}).show());
+            view.setOnClickListener(v->new AlertDialog.Builder(this).setTitle(entry.recipient+" — "+entry.phone).setMessage("Date : "+format.format(new java.util.Date(entry.date))+"\n\nStatut : "+entry.status+"\n\nMessage :\n"+entry.message).setPositiveButton("Fermer",null).setNeutralButton("Supprimer",(d,w)->{history.remove(index);saveData();render();}).show());
             item.addView(view);
         }
     }
