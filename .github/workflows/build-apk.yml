@@ -11,9 +11,17 @@ jobs:
       - name: Récupérer les fichiers
         uses: actions/checkout@v4
 
-      - name: Vérifier le dossier du projet
-        run: |
-          pwd
-          ls -la
-          ls -la MessageFacile
-          find MessageFacile -maxdepth 5 -type f
+      - name: Installer Java
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Préparer Gradle
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.9'
+
+      - name: Vérifier le projet Android
+        working-directory: MessageFacile
+        run: gradle --no-daemon projects
